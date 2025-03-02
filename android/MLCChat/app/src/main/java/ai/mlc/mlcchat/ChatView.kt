@@ -165,9 +165,11 @@ class DVFS() : Device() {
 
         val freq = gpufreq[device]!![freqIndex] // available frequencies for the device
         var command = "su -c " +    // make a command
-                      "echo $freq > /sys/devices/platform/1f000000.mali/scaling_max_freq" +
-                      "echo $freq > /sys/devices/platform/1f000000.mali/scaling_min_freq" +
-                      "echo $freq > /sys/devices/platform/1f000000.mali/scaling_max_freq"  // to ensure max_freq set
+                      "echo $freq > /sys/devices/platform/1f000000.mali/scaling_max_freq; " +
+                      "echo $freq > /sys/devices/platform/1f000000.mali/scaling_min_freq; " +
+                      "echo $freq > /sys/devices/platform/1f000000.mali/scaling_max_freq; "  // to ensure max_freq set
+
+
 
         // run android kernel command
         val process = Runtime.getRuntime().exec(command)
@@ -229,7 +231,7 @@ class DVFS() : Device() {
                     "echo $freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/scaling_devfreq_max; "
 
             // Google Tensor 4
-            "Pixel9" -> command += "echo $freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/min_freq; " +
+            "Pixel9" -> command += "echo $freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/scaling_devfreq_min; " +
                     "echo $freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/max_freq; "
 
         }
@@ -267,7 +269,7 @@ class DVFS() : Device() {
             "S24" -> command += "echo $max_freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/scaling_devfreq_max; " +
                     "echo $min_freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/scaling_devfreq_min; "
             // Google Tensor 4
-            "Pixel9" -> command += "echo $min_freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/min_freq; " +
+            "Pixel9" -> command += "echo $min_freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/scaling_devfreq_min; " +
                     "echo $max_freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/max_freq; "
         }
 
@@ -570,8 +572,8 @@ fun SendMessageView(chatState: AppViewModel.ChatState) {
 
             // Pixel9 (Google Tensor G4)
             val dvfs = DVFS("Pixel9")
-            val gpu_idx = 0
-            val ram_idx = 0
+            val gpu_idx = 5 // 0~13
+            val ram_idx = 0  // 0~12
 
 
             /* GPU DVFS */
