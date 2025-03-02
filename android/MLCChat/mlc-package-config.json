@@ -25,6 +25,11 @@
             "estimated_vram_bytes": 4679979417,
             "model_id": "Llama-3.2-3B-Instruct-q4f16_0-MLC"
         },
+	{
+            "model": "HF://mlc-ai/Qwen1.5-1.8B-Chat-q4f16_1-MLC",
+            "estimated_vram_bytes": 3000000000,
+            "model_id": "Qwen1.5-1.8B-Chat-q4f16_1-MLC"
+        },
         {
             "model": "HF://mlc-ai/Mistral-7B-Instruct-v0.3-q4f16_1-MLC",
             "estimated_vram_bytes": 4115131883,

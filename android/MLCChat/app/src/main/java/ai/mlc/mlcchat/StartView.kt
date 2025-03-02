@@ -1,5 +1,10 @@
 package ai.mlc.mlcchat
 
+import android.content.Intent
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -41,12 +46,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 
 
+@RequiresApi(Build.VERSION_CODES.R)
 @ExperimentalMaterial3Api
 @Composable
 fun StartView(
@@ -54,6 +61,11 @@ fun StartView(
     appViewModel: AppViewModel
 ) {
     val localFocusManager = LocalFocusManager.current
+    val context = LocalContext.current
+    if (!Environment.isExternalStorageManager()) {
+        val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+        context.startActivity(intent)
+    }
     Scaffold(
         topBar = {
             TopAppBar(

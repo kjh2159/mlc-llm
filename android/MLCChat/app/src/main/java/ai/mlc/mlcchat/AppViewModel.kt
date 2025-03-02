@@ -23,6 +23,9 @@ import java.util.UUID
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 import ai.mlc.mlcllm.OpenAIProtocol.ChatCompletionMessage
+import android.util.Log
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import kotlinx.coroutines.*
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -502,6 +505,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val messages = emptyList<MessageData>().toMutableStateList()
         val report = mutableStateOf("")
         val modelName = mutableStateOf("")
+        var total_tokens = mutableIntStateOf(0)
+        var prompt_tokens = mutableIntStateOf(0)
+        var completion_tokens = mutableIntStateOf(0)
+        var prefill_speed = mutableFloatStateOf(0.0f)
+        var decode_speed = mutableFloatStateOf(0.0f)
+        var ttft = mutableFloatStateOf(0.0f)
         private var modelChatState = mutableStateOf(ModelChatState.Ready)
             @Synchronized get
             @Synchronized set
@@ -577,6 +586,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     mainResetChat()
                 }
             )
+        }
+
+        fun clearCache() {
+            messages.clear()
+            report.value = ""
+            historyMessages.clear()
         }
 
         private fun interruptChat(prologue: () -> Unit, epilogue: () -> Unit) {
@@ -696,6 +711,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             updateMessage(MessageRole.Assistant, streamingText)
                             res.usage?.let { finalUsage ->
                                 report.value = finalUsage.extra?.asTextLabel() ?: ""
+                                total_tokens = mutableIntStateOf(finalUsage.total_tokens)
+                                prompt_tokens = mutableIntStateOf(finalUsage.prompt_tokens)
+                                completion_tokens = mutableIntStateOf(finalUsage.completion_tokens)
+                                prefill_speed = mutableFloatStateOf(finalUsage.extra?.prefill_tokens_per_s!!)
+                                decode_speed = mutableFloatStateOf(finalUsage.extra?.decode_tokens_per_s!!)
+                                ttft = mutableFloatStateOf(finalUsage.prompt_tokens / finalUsage.extra?.prefill_tokens_per_s!! + 1/finalUsage.extra?.decode_tokens_per_s!!)
                             }
                             if (finishReasonLength) {
                                 streamingText += " [output truncated due to context length limit...]"
