@@ -570,17 +570,17 @@ fun SendMessageView(chatState: AppViewModel.ChatState) {
 
             // Pixel9 (Google Tensor G4)
             val dvfs = DVFS("Pixel9")
-            val gpu_idx = 13
-            val ram_idx = 12
+            val gpu_idx = 0
+            val ram_idx = 0
 
 
             /* GPU DVFS */
-            //dvfs.setGPUFrequency(gpu_idx)
+            dvfs.setGPUFrequency(gpu_idx)
             //dvfs.unsetGPUFrequency()
 
             /* RAM DVFS */
-            //dvfs.setRAMFrequency(ram_idx)
-            //dvfs.unsetRAMFrequency(ram_idx)
+            dvfs.setRAMFrequency(ram_idx)
+            //dvfs.unsetRAMFrequency()
 
             Log.d("State", chatState.chatable().toString())
 
@@ -604,7 +604,7 @@ fun SendMessageView(chatState: AppViewModel.ChatState) {
             /* Query Stream */
             coroutineScope.launch {
                 qa_idx = 1
-                qa_limit = 2
+                qa_limit = 20
                 while (qa_idx < qa_limit + 1){
 
                     val temp = arrayListOf(((System.currentTimeMillis() - startTime).toDouble()/1000).toString()) // store system time
@@ -648,6 +648,8 @@ fun SendMessageView(chatState: AppViewModel.ChatState) {
 
                 Thread.sleep(1000) // for stability
                 // Reset DVFS settings
+                dvfs.unsetGPUFrequency()
+                dvfs.unsetRAMFrequency()
             }
         }) {
             // Text of Text button
@@ -735,7 +737,7 @@ fun getRecordsName(clusterIndices: List<Int>, emptyThermal: List<String>?, devic
     process.waitFor()
 
     names += tempRecord.replace("\n", ",")
-    names += "gpu_min_clock,gpu_max_clock,gpu_cur_freq"
+    names += "gpu_min_clock,gpu_max_clock,gpu_cur_freq,"
 
     // 0, 4, 7) 8 Gen 1 CPU: 1 + 3 + 4 | 7: prime, 4: Gold, 0 Silver
     clusterIndices.forEach { index ->
