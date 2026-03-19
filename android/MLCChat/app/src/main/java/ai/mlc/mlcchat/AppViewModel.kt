@@ -598,9 +598,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         fun clearCache() {
+            // app-side clear
             messages.clear()
             report.value = ""
             historyMessages.clear()
+
+            // engine-side KV cache clear (recycle)
+            engine.reset() // freed for reuse
+
+            // tear down engine and release memory pools
+            //engine.unload() // returned to OS
+
+            // NOTE: it is almost same with `chatState.requestResetChat()`.
         }
 
         private fun interruptChat(prologue: () -> Unit, epilogue: () -> Unit) {
