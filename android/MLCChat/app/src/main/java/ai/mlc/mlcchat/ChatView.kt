@@ -531,24 +531,31 @@ fun SendMessageView(chatState: AppViewModel.ChatState, activity: Activity) {
     val localActivity : MainActivity = activity as MainActivity
     /* custom variables */
     var text by rememberSaveable { mutableStateOf("") }
-// query stream
+
+    // query stream
+    // TODO: make directory when it does not exist
+    /** WARN: ensure the path. **/
+    val STORE_PATH_SRC = "/sdcard/Documents/mlc-llm"
     val coroutineScope = rememberCoroutineScope()
+
+    // TODO: change soft code
+    /** For now, these values might be ignored by hard code. **/
     val query_num = 3
     var qa_idx = 1 // means starting qa index (csv line number)
     val qa_start_idx = qa_idx
     var qa_limit = qa_idx + query_num
+
     // load csv file for hotpot qa
     val context = LocalContext.current
     var qa_lists by remember { mutableStateOf<List<List<String>>>(emptyList()) }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            qa_lists = readCSV(context, "datasets/hotpot_qa.csv")
+            qa_lists = readCSV(context, "datasets/llama32_256.csv")
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(context, "dataset loaded!", Toast.LENGTH_SHORT).show()
             }
         }
     }
-    var sigterm = mutableStateOf(false) // if it's true, then recording process is terminated
 
 // data collection
     var queryTimes = ArrayList<ArrayList<String>>()
@@ -625,88 +632,106 @@ fun SendMessageView(chatState: AppViewModel.ChatState, activity: Activity) {
         TextButton( onClick = {
 
             // Pixel9 (Google Tensor G4)
-            val dvfs = DVFS("S24")
+            val dvfs = DVFS("Pixel9")
+            val sigterm = mutableStateOf(false) // if it's true, then recording process is terminated
+
+            val crashHandler = kotlinx.coroutines.CoroutineExceptionHandler { _, throwable ->
+                try {
+                    BrightnessGuard.restoreBrightnessMax()
+                    dvfs.unsetGPUFrequency()
+                    dvfs.unsetRAMFrequency()
+                } catch (_: Throwable) {
+                }
+                throw throwable
+            }
+
+
+            /** Temporary for exp  **/
+
             val gpu_idx = 13 // 0~13
             val ram_idx = 12  // 0~12
-
+            val file_hard = "Pixel9_Llama3.2_3B_Q4F16_1_256-128_hard.txt"
+            val file_infer = "Pixel9_Llama3.2_3B_Q4F16_1_256-128_infer.txt"
 
             /* GPU DVFS */
-//            dvfs.setGPUFrequency(gpu_idx)
+            dvfs.setGPUFrequency(gpu_idx)
             //dvfs.unsetGPUFrequency()
 
             /* RAM DVFS */
-//            dvfs.setRAMFrequency(ram_idx)
+            dvfs.setRAMFrequency(ram_idx)
             //dvfs.unsetRAMFrequency()
 
-//            Log.d("State", chatState.chatable().toString())
+            //Log.d("State", chatState.chatable().toString())
 
             /* Record Hard Info */
-            val startTime = System.currentTimeMillis()
-            CoroutineScope(Dispatchers.IO).launch {
-                recordProcessing(
-                    "/sdcard/Documents",
-                    "hard_info.txt",
-                    startTime,
-                    dvfs.clusterIndices,
-                    dvfs.emptyThermal[dvfs.device],
-                    sigterm,
-                    dvfs.device
-                )
+            coroutineScope.launch(crashHandler) {
+                try {
+                    BrightnessGuard.setBrightnessMin()
+                    val startTime = System.currentTimeMillis()
+                    qa_idx = 1
+                    qa_limit = 5
 
-                delay(2000) // for stability
-//                ShareResult(context)
-            }
-
-            /* Query Stream */
-            coroutineScope.launch {
-                qa_idx = 1
-                qa_limit = 3
-                while (qa_idx < qa_limit + 1){
-
-                    val temp = arrayListOf(((System.currentTimeMillis() - startTime).toDouble()/1000).toString()) // store system time
-                    // set input text
-                    text = qa_lists[qa_idx][1]
-                    // send message and request text generation
-                    onSendButtonClicked()
-                    qa_idx++
-
-                    while (!chatState.chatable()){ // while not chatable -> not READY
-                        delay(20)
-                        continue
+                    // recording start
+                    CoroutineScope(Dispatchers.IO).launch {
+                        recordProcessing(
+                            STORE_PATH_SRC, // path
+                            file_hard, // file
+                            startTime,
+                            dvfs.clusterIndices,
+                            dvfs.emptyThermal[dvfs.device],
+                            sigterm,
+                            dvfs.device
+                        )
                     }
-                    delay(5)
 
-                    //collect data
-                    queryTimes.add(temp) // system time (to be input)
-                    temp.add(chatState.prefill_speed.floatValue.toString())
-                    temp.add(chatState.decode_speed.floatValue.toString())
-                    temp.add(chatState.prompt_tokens.intValue.toString())
-                    temp.add(chatState.completion_tokens.intValue.toString())
-                    temp.add(chatState.ttft.floatValue.toString())
+                    // LLM generation start
+                    while (qa_idx < qa_limit + 1) {
+                        val temp = arrayListOf(((System.currentTimeMillis() - startTime).toDouble()/1000).toString()) // store system time
 
-                    // for test
-                    Log.d("TOKEN", chatState.report.component1().toString()) // ex: prefill: 1.2 tok/s, decode: 12.0 tok/s
-                    Log.d("TOKEN", chatState.prompt_tokens.intValue.toString())
-                    Log.d("TOKEN", chatState.completion_tokens.intValue.toString())
-                    Log.d("TOKEN", chatState.total_tokens.intValue.toString())
+                        text = qa_lists[qa_idx][1]
+                        chatState.requestGenerate(text, activity)
+                        qa_idx++
 
-                    // write data
-                    writeRecord("/sdcard/Documents", "infer_info.txt", queryTimes)
-                    queryTimes.clear()
-                    chatState.clearCache() // not allow it to maintain context
+                        while (!chatState.chatable()){ // while not chatable -> not READY
+                            delay(20)
+                            continue
+                        }
 
+                        delay(5)
+
+                        //collect data
+                        queryTimes.add(temp) // system time (to be input)
+                        temp.add(chatState.prefill_speed.floatValue.toString())
+                        temp.add(chatState.decode_speed.floatValue.toString())
+                        temp.add(chatState.prompt_tokens.intValue.toString())
+                        temp.add(chatState.completion_tokens.intValue.toString())
+                        temp.add(chatState.ttft.floatValue.toString())
+
+                        // for test
+                        Log.d("TOKEN", chatState.report.component1().toString()) // ex: prefill: 1.2 tok/s, decode: 12.0 tok/s
+                        Log.d("TOKEN", chatState.prompt_tokens.intValue.toString())
+                        Log.d("TOKEN", chatState.completion_tokens.intValue.toString())
+                        Log.d("TOKEN", chatState.total_tokens.intValue.toString())
+
+                        // write data
+                        writeRecord( STORE_PATH_SRC, // path
+                                    file_infer, // filename
+                                    queryTimes)
+                        queryTimes.clear()
+                        chatState.clearCache() // not allow it to maintain context
+                    }
+                } catch (t: Throwable) {
+                    Log.e("TestRun", "Experiment failed", t)
+                    throw t
+                } finally {
+                    try {
+                        sigterm.value = true
+                        BrightnessGuard.restoreBrightnessMax()
+                        dvfs.unsetGPUFrequency()
+                        dvfs.unsetRAMFrequency()
+                    } catch (_: Throwable) {
+                    }
                 }
-
-                // hard record termination signal
-                sigterm.value = true
-
-                // write last line
-                writeRecord("/sdcard/Documents", "infer_info.txt", queryTimes)
-
-                Thread.sleep(1000) // for stability
-                // Reset DVFS settings
-                dvfs.unsetGPUFrequency()
-                dvfs.unsetRAMFrequency()
             }
         }) {
             // Text of Text button
