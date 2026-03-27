@@ -774,9 +774,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 total_tokens = mutableIntStateOf(finalUsage.total_tokens)
                                 prompt_tokens = mutableIntStateOf(finalUsage.prompt_tokens)
                                 completion_tokens = mutableIntStateOf(finalUsage.completion_tokens)
-                                prefill_speed = mutableFloatStateOf(finalUsage.extra?.prefill_tokens_per_s!!)
-                                decode_speed = mutableFloatStateOf(finalUsage.extra?.decode_tokens_per_s!!)
-                                ttft = mutableFloatStateOf(finalUsage.prompt_tokens / finalUsage.extra?.prefill_tokens_per_s!! + 1/finalUsage.extra?.decode_tokens_per_s!!)
+
+                                // protect crash
+                                val prefill = finalUsage.extra?.prefill_tokens_per_s ?: 0f
+                                val decode = finalUsage.extra?.decode_tokens_per_s ?: 0f
+                                prefill_speed.floatValue = prefill
+                                decode_speed.floatValue = decode
+                                ttft.floatValue = if (prefill > 0f && decode > 0f) (finalUsage.prompt_tokens / prefill) + (1f / decode) else 0f
                             }
                             if (finishReasonLength) {
                                 streamingText += " [output truncated due to context length limit...]"
