@@ -528,6 +528,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private val executorService = Executors.newSingleThreadExecutor()
         private val viewModelScope = CoroutineScope(Dispatchers.Main + Job())
         private var imageUri: Uri? = null
+
+        @Volatile
+        private var prefillMarkActive: Boolean = false
+
+
         private fun mainResetChat() {
             imageUri = null
             executorService.submit {
@@ -535,6 +540,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 historyMessages = mutableListOf<ChatCompletionMessage>()
                 viewModelScope.launch {
                     clearHistory()
+                    prefillMarkActive = false
                     switchToReady()
                 }
             }
@@ -718,10 +724,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return "data:image/jpg;base64,$imageBase64"
         }
 
-        fun requestGenerate(prompt: String, activity: Activity) {
+        fun requestGenerate(prompt: String, activity: Activity, clock: ClockProfile? = null) {
             require(chatable())
             switchToGenerating()
             appendMessage(MessageRole.User, prompt)
+            prefillMarkActive = true
             appendMessage(MessageRole.Assistant, "")
             var content = ChatCompletionMessageContent(text=prompt)
             if (imageUri != null) {
@@ -747,10 +754,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     content = content
                 ))
 
+                // TODO: replace with UI config values
                 viewModelScope.launch {
                     val responses = engine.chat.completions.create(
                         messages = historyMessages,
-                        stream_options = OpenAIProtocol.StreamOptions(include_usage = true)
+                        stream_options = OpenAIProtocol.StreamOptions(include_usage = true),
+
+                        /** IGNITE options **/
+                        gpu_clock_p = clock?.gpuClockPrefill,
+                        gpu_clock_d = clock?.gpuClockDecode,
+                        ram_clock_p = clock?.ramClockPrefill,
+                        ram_clock_d = clock?.ramClockDecode,
+                        phase_pause = clock?.phasePause
                     )
 
                     var finishReasonLength = false
@@ -760,7 +775,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (!callBackend {
                             for (choice in res.choices) {
                                 choice.delta.content?.let { content ->
-                                    streamingText += content.asText()
+                                    // streamingText += content.asText()
+                                    val delta = content.asText()
+                                    if (delta.isNotEmpty() && prefillMarkActive) {
+                                        prefillMarkActive = false
+                                    }
+                                    streamingText += delta
                                 }
                                 choice.finish_reason?.let { finishReason ->
                                     if (finishReason == "length") {
@@ -793,10 +813,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             role = OpenAIProtocol.ChatCompletionRole.assistant,
                             content = streamingText
                         ))
+                        prefillMarkActive = false
                         streamingText = ""
                     } else {
                         if (historyMessages.isNotEmpty()) {
                             historyMessages.removeAt(historyMessages.size - 1)
+                            prefillMarkActive = false
                         }
                     }
 

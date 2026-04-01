@@ -38,6 +38,7 @@ class Qwen3Config(ConfigBase):  # pylint: disable=too-many-instance-attributes
     context_window_size: int = 0
     prefill_chunk_size: int = 0
     tensor_parallel_shards: int = 1
+    layer_boundary_mark: bool = False
     head_dim: int = 0
     dtype: str = "float32"
     max_batch_size: int = 1
@@ -198,6 +199,7 @@ class Qwen3DecoderLayer(nn.Module):
         self.post_attention_layernorm = nn.RMSNorm(
             config.hidden_size, -1, config.rms_norm_eps, bias=False
         )
+        self.layer_boundary_mark = config.layer_boundary_mark
 
         def _set_tp():
             def _set(layer, hint):
@@ -230,9 +232,17 @@ class Qwen3DecoderLayer(nn.Module):
     def forward(self, hidden_states: Tensor, paged_kv_cache: PagedKVCache, layer_id: int):
         out = self.input_layernorm(hidden_states)
         out = self.self_attn(out, paged_kv_cache, layer_id)
+
+        if self.layer_boundary_mark:
+            out = op_ext.layer_pause(out, layer_id=layer_id, point_id=0) # Attention exit marker
+
         hidden_states = self._apply_residual(out, residual=hidden_states)
         out = self.post_attention_layernorm(hidden_states)
         out = self.mlp(out)
+
+        if self.layer_boundary_mark:
+            out = op_ext.layer_pause(out, layer_id=layer_id, point_id=1) # MLP exit marker
+
         hidden_states = self._apply_residual(out, residual=hidden_states)
         return hidden_states
 

@@ -11,5 +11,5 @@ from .mrope import (
     apply_multimodal_rotary_pos_emb,
     get_mrope_position_ids,
 )
-from .pipeline_parallel import pipeline_stage_boundary
+from .pipeline_parallel import pipeline_stage_boundary,  layer_pause
 from .top_p_pivot import top_p_pivot, top_p_renorm

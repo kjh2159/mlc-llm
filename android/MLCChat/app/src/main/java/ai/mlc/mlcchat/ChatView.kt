@@ -117,7 +117,8 @@ class DVFS() : Device() {
     )
 
     val gpufreq : Map<String, List<Int>> = mapOf(
-        "Pixel9" to listOf( 150000, 302000, 337000, 376000, 419000, 467000, 521000, 580000, 649000, 723000, 807000, 850000, 890000, 940000 )
+        "Pixel9" to listOf( 150000, 302000, 337000, 376000, 419000, 467000, 521000, 580000, 649000, 723000, 807000, 850000, 890000, 940000 ),
+        "S24"    to listOf( 252000, 315000, 350000, 400000, 500000, 545000, 600000, 650000, 700000, 800000, 900000, 100000, 1095000 )
     )
 
     val ddrfreq : Map<String, List<Int>> = mapOf(
@@ -159,12 +160,20 @@ class DVFS() : Device() {
         }
 
         val freq = gpufreq[device]!![freqIndex] // available frequencies for the device
-        var command = "su -c " +    // make a command
-                "echo $freq > /sys/devices/platform/1f000000.mali/scaling_max_freq; " +
-                "echo $freq > /sys/devices/platform/1f000000.mali/scaling_min_freq; " +
-                "echo $freq > /sys/devices/platform/1f000000.mali/scaling_max_freq; "  // to ensure max_freq set
+        var command = "su -c "
 
+        // make a command
+        when (device) {
+            // for GPU frequency, cur_freq is only readable (not writable).
 
+            "Pixel9" -> "echo $freq > /sys/devices/platform/1f000000.mali/scaling_max_freq; " +
+                        "echo $freq > /sys/devices/platform/1f000000.mali/scaling_min_freq; " +
+                        "echo $freq > /sys/devices/platform/1f000000.mali/scaling_max_freq; "  // to ensure max_freq set
+
+            "S24" -> command += "echo $freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/max_freq" +
+                                "echo $freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/min_freq" +
+                                "echo $freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/max_freq"
+        }
 
         // run android kernel command
         val process = Runtime.getRuntime().exec(command)
@@ -178,10 +187,20 @@ class DVFS() : Device() {
         val min_freq = freqs?.get(0)
         val max_freq = freqs?.get(freqs.size-1)
 
-        var command = "su -c " +      // make a command
-                "echo $max_freq > /sys/devices/platform/1f000000.mali/scaling_max_freq" +
-                "echo $min_freq > /sys/devices/platform/1f000000.mali/scaling_min_freq" +
-                "echo $max_freq > /sys/devices/platform/1f000000.mali/scaling_max_freq"  // to ensure max_freq set
+        var command = "su -c "
+
+        // make a command
+        when (device) {
+            // Pixel9
+            "Pixel9" -> command += "echo $max_freq > /sys/devices/platform/1f000000.mali/scaling_max_freq" +
+                                   "echo $min_freq > /sys/devices/platform/1f000000.mali/scaling_min_freq" +
+                                   "echo $max_freq > /sys/devices/platform/1f000000.mali/scaling_max_freq"  // to ensure max_freq set
+
+            // S24:
+            "S24" -> command += "echo $max_freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/max_freq" +
+                                "echo $min_freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/min_freq" +
+                                "echo $max_freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/max_freq"
+        }
 
         // run android kernel command
         val process = Runtime.getRuntime().exec(command)
@@ -550,7 +569,7 @@ fun SendMessageView(chatState: AppViewModel.ChatState, activity: Activity) {
     var qa_lists by remember { mutableStateOf<List<List<String>>>(emptyList()) }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            qa_lists = readCSV(context, "datasets/llama32_256.csv")
+            qa_lists = readCSV(context, "datasets/qwen3_64.csv")
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(context, "dataset loaded!", Toast.LENGTH_SHORT).show()
             }
@@ -648,10 +667,10 @@ fun SendMessageView(chatState: AppViewModel.ChatState, activity: Activity) {
 
             /** Temporary for exp  **/
 
-            val gpu_idx = 13 // 0~13
+            val gpu_idx = 11 // 0~13 (Pixel9) / 0~12 (S24)
             val ram_idx = 12  // 0~12
-            val file_hard = "Pixel9_Llama3.2_3B_Q4F16_1_256-128_hard.txt"
-            val file_infer = "Pixel9_Llama3.2_3B_Q4F16_1_256-128_infer.txt"
+            val file_hard = "temp_hard.txt" //"S24_Qwen3_0.6B_Q4F16_0_64-128_hard_CPUvsGPU.txt" //"S24_Qwen3_0.6B_min_hard.txt"
+            val file_infer = "temp_infer.txt" //"S24_Qwen3_0.6B_Q4F16_0_64-128_infer_CPUvsGPU.txt" //"Pixel9_Llama3.2_3B_Q4F16_1_256-128_infer.txt"
 
             /* GPU DVFS */
             dvfs.setGPUFrequency(gpu_idx)
@@ -669,7 +688,7 @@ fun SendMessageView(chatState: AppViewModel.ChatState, activity: Activity) {
                     BrightnessGuard.setBrightnessMin()
                     val startTime = System.currentTimeMillis()
                     qa_idx = 1
-                    qa_limit = 5
+                    qa_limit = 1
 
                     // recording start
                     CoroutineScope(Dispatchers.IO).launch {

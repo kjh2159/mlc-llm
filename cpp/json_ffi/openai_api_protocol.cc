@@ -423,6 +423,56 @@ Result<ChatCompletionRequest> ChatCompletionRequest::FromJSON(const std::string&
     request.debug_config = debug_config_res.Unwrap();
   }
 
+  // gpu_clock_p
+  Result<std::optional<int64_t>> gpu_clock_p_res =
+      json::LookupOptionalWithResultReturn<int64_t>(json_obj, "gpu_clock_p");
+  if (gpu_clock_p_res.IsErr()) {
+    return TResult::Error(gpu_clock_p_res.UnwrapErr());
+  }
+  if (gpu_clock_p_res.Unwrap().has_value()) {
+    request.gpu_clock_p = static_cast<int>(gpu_clock_p_res.Unwrap().value());
+  }
+
+  // gpu_clock_d
+  Result<std::optional<int64_t>> gpu_clock_d_res =
+      json::LookupOptionalWithResultReturn<int64_t>(json_obj, "gpu_clock_d");
+  if (gpu_clock_d_res.IsErr()) {
+    return TResult::Error(gpu_clock_d_res.UnwrapErr());
+  }
+  if (gpu_clock_d_res.Unwrap().has_value()) {
+    request.gpu_clock_d = static_cast<int>(gpu_clock_d_res.Unwrap().value());
+  }
+
+  // ram_clock_p
+  Result<std::optional<int64_t>> ram_clock_p_res =
+      json::LookupOptionalWithResultReturn<int64_t>(json_obj, "ram_clock_p");
+  if (ram_clock_p_res.IsErr()) {
+    return TResult::Error(ram_clock_p_res.UnwrapErr());
+  }
+  if (ram_clock_p_res.Unwrap().has_value()) {
+    request.ram_clock_p = static_cast<int>(ram_clock_p_res.Unwrap().value());
+  }
+
+  // ram_clock_d
+  Result<std::optional<int64_t>> ram_clock_d_res =
+      json::LookupOptionalWithResultReturn<int64_t>(json_obj, "ram_clock_d");
+  if (ram_clock_d_res.IsErr()) {
+    return TResult::Error(ram_clock_d_res.UnwrapErr());
+  }
+  if (ram_clock_d_res.Unwrap().has_value()) {
+    request.ram_clock_d = static_cast<int>(ram_clock_d_res.Unwrap().value());
+  }
+
+  // phase_pause
+  Result<std::optional<int64_t>> phase_pause_res =
+      json::LookupOptionalWithResultReturn<int64_t>(json_obj, "phase_pause");
+  if (phase_pause_res.IsErr()) {
+    return TResult::Error(phase_pause_res.UnwrapErr());
+  }
+  if (phase_pause_res.Unwrap().has_value()) {
+    request.phase_pause = static_cast<int>(phase_pause_res.Unwrap().value());
+  }
+
   // TODO: Other parameters
   return TResult::Ok(request);
 }

@@ -507,6 +507,7 @@ class EngineImpl : public Engine {
     estate_->Reset();
     for (Model model : models_) {
       model->Reset();
+      ClearLayerPause();
     }
   }
 

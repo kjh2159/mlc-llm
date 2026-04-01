@@ -108,6 +108,14 @@ struct RequestMetrics {
   int64_t decode_tokens = 0;
   /*! \brief The number of tokens predicted by jump-forward decoding. */
   int64_t jump_forward_tokens = 0;
+  /*! \brief runtime phase-hook state: prefill clock */
+  bool phase_prefill_clock_controlled = false;
+  /*! \brief runtime phase-hook state: decode clock */
+  bool phase_decode_clock_controlled = false;
+  /*! \brief runtime phase-hook state: pause time */
+  bool phase_pause_controlled = false;
+  
+
 
   /*! \brief The time of adding the request to engine. */
   std::chrono::high_resolution_clock::time_point add_time_point;
@@ -149,6 +157,11 @@ struct RequestMetrics {
     this->prompt_tokens = 0;
     this->prefill_tokens = 0;
     this->completion_tokens = 0;
+    this->decode_tokens = 0;
+    this->phase_prefill_clock_controlled = false;
+    this->phase_decode_clock_controlled = false;
+    this->phase_pause_controlled = false;
+    // Per-request metrics.
   }
   /*!
    * \brief Return the request metrics in JSON.

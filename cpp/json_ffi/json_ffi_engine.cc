@@ -114,6 +114,24 @@ bool JSONFFIEngine::AddRequest(std::string request_json_str, std::string request
   gen_cfg->stop_token_ids = conv_template_.stop_token_ids;
   gen_cfg->response_format = request.response_format.value_or(ResponseFormat());
   gen_cfg->debug_config = request.debug_config.value_or(DebugConfig());
+  
+  // Bridge top-level chat request fields into DebugConfig
+  // Top-level fields take precedence over debug_config.* when both are set.
+  if (request.gpu_clock_p.has_value()) {
+    gen_cfg->debug_config.gpu_clock_p = request.gpu_clock_p;
+  }
+  if (request.gpu_clock_d.has_value()) {
+    gen_cfg->debug_config.gpu_clock_d = request.gpu_clock_d;
+  }
+  if (request.ram_clock_p.has_value()) {
+    gen_cfg->debug_config.ram_clock_p = request.ram_clock_p;
+  }
+  if (request.ram_clock_d.has_value()) {
+    gen_cfg->debug_config.ram_clock_d = request.ram_clock_d;
+  }
+  if (request.phase_pause.has_value()) {
+    gen_cfg->debug_config.phase_pause = request.phase_pause;
+  }
 
   Result<GenerationConfig> res_gen_config = GenerationConfig::Validate(GenerationConfig(gen_cfg));
   if (res_gen_config.IsErr()) {

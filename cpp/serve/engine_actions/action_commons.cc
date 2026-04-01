@@ -5,7 +5,14 @@
 
 #include "action_commons.h"
 
+#include <chrono>
+#include <fstream>
+#include <mutex>
+#include <thread>
+#include <tvm/ffi/function.h>
+#include <tvm/ffi/reflection/registry.h>
 #include <tvm/runtime/nvtx.h>
+#include <tvm/runtime/object.h>
 
 namespace mlc {
 namespace llm {
@@ -132,6 +139,180 @@ Array<EngineAction> CreateEngineActions(Array<Model> models, EngineConfig engine
     actions.insert(actions.begin(), disaggregation_actions.begin(), disaggregation_actions.end());
   }
   return actions;
+}
+
+namespace {
+  inline void ApplyClockProfile(std::optional<int> gpu_clock, std::optional<int> ram_clock) {
+    // TODO: implement the clock control
+  }
+} // namespace
+
+void ApplyPrefillClock(const RequestStateEntry& rsentry) {
+  // filtering
+  if (rsentry->rstate == nullptr) return;
+  auto& metrics = rsentry->rstate->metrics;
+  if (metrics.phase_prefill_clock_controlled) return;
+
+  // apply clock profile
+  const auto& dbg = rsentry->request->generation_cfg->debug_config;
+  ApplyClockProfile(dbg.gpu_clock_p, dbg.ram_clock_p);
+  metrics.phase_prefill_clock_controlled = true;
+}
+
+void ApplyDecodeClock(const RequestStateEntry& rsentry) {
+  // filtering
+  if (rsentry->rstate == nullptr) return;
+  auto& metrics = rsentry->rstate->metrics;
+  if (metrics.phase_decode_clock_controlled) return;
+
+  // apply clock profile
+  const auto& dbg = rsentry->request->generation_cfg->debug_config;
+  ApplyClockProfile(dbg.gpu_clock_d, dbg.ram_clock_d);
+  metrics.phase_decode_clock_controlled = true;
+}
+
+void ApplyPhasePause(const RequestStateEntry& rsentry) {
+  // filtering
+  if (rsentry->rstate == nullptr) return;
+  auto& metrics = rsentry->rstate->metrics;
+  if (metrics.phase_pause_controlled) return;
+
+  const auto& dbg = rsentry->request->generation_cfg->debug_config;
+  if (!dbg.phase_pause.has_value()) return;
+  if (metrics.decode_tokens != 0) return;
+
+  // apply phase pause
+  // IMPORTANT:
+  // Engine::Step() expects progress; so do a bounded pause instead of returning early.
+  std::this_thread::sleep_for(std::chrono::milliseconds(dbg.phase_pause.value()));
+  metrics.phase_pause_controlled = true;
+}
+
+namespace {
+  struct LayerPauseRuntimeState {
+    std::mutex mu;
+    bool enabled = false;
+    int target_layer = -1;
+    int target_point = -1;
+    int phase_mask = 1;
+    int phase = 0; // 1: prefill, 2: decode
+    int pause_ms = 0;
+    std::string resume_file;
+    bool once = true;
+    std::string arm_key;
+    std::string fired_arm_key;
+  };
+
+  LayerPauseRuntimeState& GetLayerPauseRuntimeState() {
+    static LayerPauseRuntimeState state;
+    return state;
+  }
+
+  // deactive funtion
+  bool ResumeFileReady(const std::string& filepath) {
+    std::ifstream f(filepath);
+    if (!f.good()) return false;
+    std::string line;
+    std::getline(f, line);
+    return line == "1" || line == "resume" || line == "go";
+  }
+} // namespace
+
+TVM_FFI_STATIC_INIT_BLOCK() {
+  namespace refl = tvm::ffi::reflection;
+  refl::GlobalDef().def("mlc.debug.layer_pause", 
+    [](ObjectRef x, int64_t layer_id, int64_t point_id) -> ObjectRef{
+      auto& state = GetLayerPauseRuntimeState();
+      bool do_pause = false;
+      int pause_ms = 0;
+      std::string resume_file;
+
+      // LOG
+      LOGI("LayerPause check at layer %ld, point %ld", layer_id, point_id);
+
+      {
+        std::lock_guard<std::mutex> lock(state.mu);
+        if (!state.enabled) return x; // not enabled, do nothing
+        if (state.target_layer >= 0 && state.target_layer != static_cast<int>(layer_id)) 
+          return x; // not the target layer, do nothing
+        if (state.target_point == -1 
+            || (state.target_point >= 0 && state.target_point != static_cast<int>(point_id)))
+          return x; // not the target point, do nothing
+        if ((state.phase_mask & state.phase) == 0) 
+          return x; // not the target phase, do nothing
+
+        if (state.once) {
+          if (state.fired_arm_key == state.arm_key) 
+            return x; // already fired for this arm key, do nothing
+          state.fired_arm_key = state.arm_key; // mark as fired for this arm key
+        }
+        do_pause = true;
+        pause_ms = state.pause_ms;
+        // resume_file = state.resume_file; // deactive
+      }
+
+      if (!do_pause) return x; // double check, do nothing if not pausing
+
+      // deactive: not considered about the resume file
+      // if (!state.resume_file.empty()) {
+      //   while (!ResumeFileReady(state.resume_file)) {
+      //     std::this_thread::sleep_for(std::chrono::milliseconds(20)); // wait for resume signal
+      //   }
+      // } 
+      
+      if (pause_ms > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(pause_ms)); // pause
+      }
+      return x; // return the input as is
+    });
+}
+
+void SetupLayerPausePrefill(const std::vector<RequestStateEntry>& rsentries) {
+  if (rsentries.empty()) return;
+  const auto& dbg = rsentries[0]->request->generation_cfg->debug_config;
+  auto& state = GetLayerPauseRuntimeState();
+  std::lock_guard<std::mutex> lock(state.mu);
+  state.enabled = dbg.layer_pause_enable;
+  state.target_layer = dbg.layer_pause_layer;
+  state.target_point = dbg.layer_pause_point;
+  state.phase_mask = dbg.layer_pause_phase_mask;
+  state.phase = 1; // prefill
+  state.pause_ms = dbg.layer_pause_duration_ms;
+  state.resume_file = ""; //dbg.layer_pause_resume_file.value_or(""); // deactive
+  state.once = dbg.layer_pause_once;
+  state.arm_key =std::string(rsentries[0]->request->id) + ":prefill";
+}
+
+void SetupLayerPauseDecode(const std::vector<RequestStateEntry>& rsentries) {
+  if (rsentries.empty()) return;
+  const auto& dbg = rsentries[0]->request->generation_cfg->debug_config;
+  auto& state = GetLayerPauseRuntimeState();
+  std::lock_guard<std::mutex> lock(state.mu);
+  state.enabled = dbg.layer_pause_enable;
+  state.target_layer = dbg.layer_pause_layer;
+  state.target_point = dbg.layer_pause_point;
+  state.phase_mask = dbg.layer_pause_phase_mask;
+  state.phase = 2; // decode
+  state.pause_ms = dbg.layer_pause_duration_ms;
+  state.resume_file = ""; //dbg.layer_pause_resume_file.value_or(""); // deactive
+  state.once = dbg.layer_pause_once;
+  state.arm_key =std::string(rsentries[0]->request->id) + ":decode";
+}
+
+void ClearLayerPause() {
+  auto& state = GetLayerPauseRuntimeState();
+  std::lock_guard<std::mutex> lock(state.mu);
+  // reset state
+  state.enabled = false;
+  state.target_layer = -1;
+  state.target_point = -1;
+  state.phase_mask = 1;
+  state.phase = 0;
+  state.pause_ms = 0;
+  state.resume_file = "";
+  state.once = true;
+  state.arm_key = "";
+  state.fired_arm_key = "";
 }
 
 void RemoveRequestFromModel(EngineState estate, int64_t req_internal_id,

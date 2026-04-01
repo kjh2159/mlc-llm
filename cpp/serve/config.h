@@ -98,6 +98,23 @@ class DebugConfig {
   SpecialRequestKind special_request = SpecialRequestKind::kNone;
   /*! \brief The grammar execution mode. */
   GrammarExecutionMode grammar_execution_mode = GrammarExecutionMode::kJumpForward;
+  
+  // TODO: rewrap with another config class
+  // Phase-wise clock control (optional; unset => no override)
+  std::optional<int> gpu_clock_p = std::nullopt;
+  std::optional<int> gpu_clock_d = std::nullopt;
+  std::optional<int> ram_clock_p = std::nullopt;
+  std::optional<int> ram_clock_d = std::nullopt;
+  std::optional<int> phase_pause = std::nullopt;
+  // Layer-wise pause control (optional; unset => no override)
+  bool layer_pause_enable = false;
+  int layer_pause_layer = -1; // -1: all
+  int layer_pause_point = -1; // -1: all, 0: after attention, 1: after MLP
+  int layer_pause_phase_mask = 1; // 1: prefill, 2: decode, 3: both
+  int layer_pause_duration_ms = 0;
+  std::optional<int> layer_pause_resume_file = std::nullopt;
+  bool layer_pause_once = true; // once per (request_id + phase)
+
   DisaggConfig disagg_config;
 
   /*!

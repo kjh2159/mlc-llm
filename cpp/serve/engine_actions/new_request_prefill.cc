@@ -5,6 +5,7 @@
 
 #include "../sampler/sampler.h"
 #include "batch_prefill_base.h"
+#include "action_commons.h"
 
 namespace mlc {
 namespace llm {
@@ -54,6 +55,20 @@ class NewRequestPrefillActionObj : public BatchPrefillBaseActionObj {
     std::vector<RequestStateStatus> status_before_prefill;
     UpdateRequestToAlive(prefill_inputs, estate, &request_ids, &rstates_of_entries,
                          &status_before_prefill);
+
+    // Apply prefill clock profile once per request.
+    // This implementation implies the single batch size scenario strongly.
+    for (int i = 0; i < num_rsentries; ++i) {
+      ApplyPrefillClock(prefill_inputs[i].rsentry);
+    }
+
+    {
+      std::vector<RequestStateEntry> rsentries;
+      for (const auto& p: prefill_inputs) {
+        rsentries.push_back(p.rsentry);
+      }
+      SetupLayerPausePrefill(rsentries);
+    }
 
     // - Get embedding and run prefill for each model.
     std::vector<int> prefill_lengths;

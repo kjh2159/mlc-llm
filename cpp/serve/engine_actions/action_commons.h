@@ -20,6 +20,18 @@ namespace mlc {
 namespace llm {
 namespace serve {
 
+#if defined(__ANDROID__)
+#include <android/log.h>
+#define LOG_TAG "MLC-LAYER"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#else
+#define LOGI(...) ((void)0)
+#define LOGW(...) ((void)0)
+#define LOGE(...) ((void)0)
+#endif
+
 using namespace tvm::runtime;
 
 /*! \brief Create the engine actions based on engine config. */
@@ -110,6 +122,20 @@ std::pair<Tensor, std::vector<SampleResult>> ApplyLogitProcessorAndSample(
     const Array<RequestModelState>& mstates, const std::vector<RandomGenerator*>& rngs,
     const std::vector<int>& sample_indices, const Array<GenerationConfig>& child_generation_cfg,
     const Array<String>& child_request_ids, const std::vector<int>& child_sample_indices);
+
+    /*! \brief Apply prefill clock profile once per request. */
+    void ApplyPrefillClock(const RequestStateEntry& rsentry);
+    /*! \brief Apply decode clock profile once per request. */
+    void ApplyDecodeClock(const RequestStateEntry& rsentry);
+    /*! \brief Apply phase pause once per request. */
+    void ApplyPhasePause(const RequestStateEntry& rsentry);
+    /*! \brief Setup layer pause for prefill requests. */
+    void SetupLayerPausePrefill(const std::vector<RequestStateEntry>& rsentries);
+    /*! \brief Apply layer pause for decode requests. */
+    void SetupLayerPauseDecode(const std::vector<RequestStateEntry>& rsentries);
+    /*! \brief Apply layer pause for all requests. */
+    void ClearLayerPause();
+
 
 }  // namespace serve
 }  // namespace llm

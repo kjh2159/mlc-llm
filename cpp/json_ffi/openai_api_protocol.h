@@ -148,6 +148,11 @@ class ChatCompletionRequest {
   bool ignore_eos = false;
   std::optional<ResponseFormat> response_format = std::nullopt;
   std::optional<DebugConfig> debug_config = std::nullopt;
+  std::optional<int> gpu_clock_p = std::nullopt;
+  std::optional<int> gpu_clock_d = std::nullopt;
+  std::optional<int> ram_clock_p = std::nullopt;
+  std::optional<int> ram_clock_d = std::nullopt;
+  std::optional<int> phase_pause = std::nullopt;
 
   /*! \brief Parse and create a ChatCompletionRequest instance from the given JSON string. */
   static Result<ChatCompletionRequest> FromJSON(const std::string& json_str);

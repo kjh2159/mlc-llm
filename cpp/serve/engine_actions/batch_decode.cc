@@ -65,6 +65,13 @@ class BatchDecodeActionObj : public EngineActionObj {
       }
     }
 
+    // Prefill -> decode boundary handling
+    for (const RequestStateEntry& rsentry : running_rsentries) {
+      ApplyDecodeClock(rsentry);
+      ApplyPhasePause(rsentry);
+    }
+    SetupLayerPauseDecode(running_rsentries);
+
     auto tstart = std::chrono::high_resolution_clock::now();
 
     // NOTE: Right now we only support decode all the running request states at a time.

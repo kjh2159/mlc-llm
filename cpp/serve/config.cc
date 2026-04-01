@@ -198,6 +198,53 @@ Result<DebugConfig> DebugConfig::FromJSON(const tvm::ffi::json::Object& config) 
     }
     res.disagg_config = disagg_config.Unwrap();
   }
+
+  // Optional phase-wise clock control parameters
+  {
+    // gpu_clock_p
+    auto v = json::LookupOptional<int>(config, "gpu_clock_p");
+    if (v.has_value()) {
+      res.gpu_clock_p = v.value();
+    }
+  }
+  {
+    // gpu_clock_d
+    auto v = json::LookupOptional<int>(config, "gpu_clock_d");
+    if (v.has_value()) {
+      res.gpu_clock_d = v.value();
+    }
+  }
+  {
+    // ram_clock_p
+    auto v = json::LookupOptional<int>(config, "ram_clock_p");
+    if (v.has_value()) {
+      res.ram_clock_p = v.value();
+    }
+  }
+  {
+    // ram_clock_d
+    auto v = json::LookupOptional<int>(config, "ram_clock_d");
+    if (v.has_value()) {
+      res.ram_clock_d = v.value();
+    }
+  }
+  {
+    // phase_pause
+    auto v = json::LookupOptional<int>(config, "phase_pause");
+    if (v.has_value()) {
+      res.phase_pause = v.value();
+    }
+  }
+  // Layer-wise pause control
+  res.layer_pause_enable = json::LookupOrDefault<bool>(config, "layer_pause", false);
+  res.layer_pause_layer = json::LookupOrDefault<int>(config, "layer_pause_layer", -1);
+  res.layer_pause_point = json::LookupOrDefault<int>(config, "layer_pause_point", -1);
+  res.layer_pause_phase_mask = json::LookupOrDefault<int>(config, "layer_pause_phase_mask", 1);
+  res.layer_pause_duration_ms = json::LookupOrDefault<int>(config, "layer_pause_duration_ms", 0);
+  res.layer_pause_resume_file = json::LookupOptional<int>(config, "layer_pause_resume_file");
+  res.layer_pause_once = json::LookupOrDefault<bool>(config, "layer_pause_once", true);
+
+
   return TResult::Ok(res);
 }
 
@@ -229,6 +276,35 @@ tvm::ffi::json::Object DebugConfig::AsJSON() const {
   if (disagg_config.kind != DisaggRequestKind::kNone) {
     config.Set("disagg_config", disagg_config.AsJSON());
   }
+
+  if (gpu_clock_p.has_value()) {
+    config.Set("gpu_clock_p", static_cast<int64_t>(gpu_clock_p.value()));
+  }
+  if (gpu_clock_d.has_value()) {
+    config.Set("gpu_clock_d", static_cast<int64_t>(gpu_clock_d.value()));
+  }
+  if (ram_clock_p.has_value()) {
+    config.Set("ram_clock_p", static_cast<int64_t>(ram_clock_p.value()));
+  }
+  if (ram_clock_d.has_value()) {
+    config.Set("ram_clock_d", static_cast<int64_t>(ram_clock_d.value()));
+  }
+  if (phase_pause.has_value()) {
+    config.Set("phase_pause", static_cast<int64_t>(phase_pause.value()));
+  }
+
+  if (layer_pause_enable) {
+    config.Set("layer_pause_enable", true);
+    config.Set("layer_pause_layer", static_cast<int64_t>(layer_pause_layer));
+    config.Set("layer_pause_point", static_cast<int64_t>(layer_pause_point));
+    config.Set("layer_pause_phase_mask", static_cast<int64_t>(layer_pause_phase_mask));
+    config.Set("layer_pause_duration_ms", static_cast<int64_t>(layer_pause_duration_ms));
+    if (layer_pause_resume_file.has_value()) {
+      config.Set("layer_pause_resume_file", layer_pause_resume_file.value());
+    }
+    config.Set("layer_pause_once", layer_pause_once);
+  }
+
   return config;
 }
 
