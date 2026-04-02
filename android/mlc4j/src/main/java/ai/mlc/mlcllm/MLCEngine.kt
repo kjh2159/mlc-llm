@@ -165,7 +165,12 @@ class Completions(
         top_p: Float? = null,
         tools: List<ChatTool>? = null,
         user: String? = null,
-        response_format: ResponseFormat? = null
+        response_format: ResponseFormat? = null,
+        gpu_clock_p: Int? = null,
+        gpu_clock_d: Int? = null,
+        ram_clock_p: Int? = null,
+        ram_clock_d: Int? = null,
+        phase_pause: Int? = null
     ): ReceiveChannel<ChatCompletionStreamResponse> {
         if (!stream) {
             throw IllegalArgumentException("Only stream=true is supported in MLCKotlin")
@@ -189,7 +194,12 @@ class Completions(
             top_p = top_p,
             tools = tools,
             user = user,
-            response_format = response_format
+            response_format = response_format,
+            gpu_clock_p = gpu_clock_p,
+            gpu_clock_d = gpu_clock_d,
+            ram_clock_p = ram_clock_p,
+            ram_clock_d = ram_clock_d,
+            phase_pause = phase_pause
         )
         return create(request)
     }

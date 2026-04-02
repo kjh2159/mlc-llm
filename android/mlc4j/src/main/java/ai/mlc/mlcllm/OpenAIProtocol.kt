@@ -214,7 +214,12 @@ class OpenAIProtocol {
         val top_p: Float? = null,
         val tools: List<ChatTool>? = null,
         val user: String? = null,
-        val response_format: ResponseFormat? = null
+        val response_format: ResponseFormat? = null,
+        val gpu_clock_p: Int? = null,
+        val gpu_clock_d: Int? = null,
+        val ram_clock_p: Int? = null,
+        val ram_clock_d: Int? = null,
+        val phase_pause: Int? = null
     )
 
     @Serializable
