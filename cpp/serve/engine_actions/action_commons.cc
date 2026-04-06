@@ -191,7 +191,7 @@ void ApplyPhasePause(const RequestStateEntry& rsentry) {
 namespace {
   struct LayerPauseRuntimeState {
     std::mutex mu;
-    bool enabled = false;
+    bool enabled = true; // TODO: remove
     int target_layer = -1;
     int target_point = -1;
     int phase_mask = 1;
@@ -223,33 +223,34 @@ TVM_FFI_STATIC_INIT_BLOCK() {
   refl::GlobalDef().def("mlc.debug.layer_pause", 
     [](ObjectRef x, int64_t layer_id, int64_t point_id) -> ObjectRef{
       auto& state = GetLayerPauseRuntimeState();
-      bool do_pause = false;
+      bool do_pause = true;
       int pause_ms = 0;
       std::string resume_file;
-
-      // LOG
-      LOGI("LayerPause check at layer %ld, point %ld", layer_id, point_id);
+      
+      LOGI("1");
 
       {
         std::lock_guard<std::mutex> lock(state.mu);
-        if (!state.enabled) return x; // not enabled, do nothing
+        // if (!state.enabled) return x; // not enabled, do nothing
+        
         if (state.target_layer >= 0 && state.target_layer != static_cast<int>(layer_id)) 
           return x; // not the target layer, do nothing
-        if (state.target_point == -1 
+      
+        if (state.target_point != -1 
             || (state.target_point >= 0 && state.target_point != static_cast<int>(point_id)))
           return x; // not the target point, do nothing
+      
         if ((state.phase_mask & state.phase) == 0) 
           return x; // not the target phase, do nothing
 
-        if (state.once) {
-          if (state.fired_arm_key == state.arm_key) 
-            return x; // already fired for this arm key, do nothing
-          state.fired_arm_key = state.arm_key; // mark as fired for this arm key
-        }
-        do_pause = true;
-        pause_ms = state.pause_ms;
-        // resume_file = state.resume_file; // deactive
+        // if (state.once) {
+        //   if (state.fired_arm_key == state.arm_key) 
+        //     return x; // already fired for this arm key, do nothing
+        //   state.fired_arm_key = state.arm_key; // mark as fired for this arm key
+        // }
       }
+      pause_ms = state.pause_ms;
+      // resume_file = state.resume_file; // deactive
 
       if (!do_pause) return x; // double check, do nothing if not pausing
 
@@ -260,6 +261,9 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       //   }
       // } 
       
+      // LOG
+      LOGI("LayerPause check at layer %ld, point %ld", layer_id, point_id);
+
       if (pause_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(pause_ms)); // pause
       }
@@ -288,7 +292,7 @@ void SetupLayerPauseDecode(const std::vector<RequestStateEntry>& rsentries) {
   const auto& dbg = rsentries[0]->request->generation_cfg->debug_config;
   auto& state = GetLayerPauseRuntimeState();
   std::lock_guard<std::mutex> lock(state.mu);
-  state.enabled = dbg.layer_pause_enable;
+  state.enabled = false; //dbg.layer_pause_enable;
   state.target_layer = dbg.layer_pause_layer;
   state.target_point = dbg.layer_pause_point;
   state.phase_mask = dbg.layer_pause_phase_mask;
@@ -303,7 +307,7 @@ void ClearLayerPause() {
   auto& state = GetLayerPauseRuntimeState();
   std::lock_guard<std::mutex> lock(state.mu);
   // reset state
-  state.enabled = false;
+  state.enabled = true;
   state.target_layer = -1;
   state.target_point = -1;
   state.phase_mask = 1;

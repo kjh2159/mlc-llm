@@ -107,7 +107,7 @@ class DebugConfig {
   std::optional<int> ram_clock_d = std::nullopt;
   std::optional<int> phase_pause = std::nullopt;
   // Layer-wise pause control (optional; unset => no override)
-  bool layer_pause_enable = false;
+  bool layer_pause_enable = true;
   int layer_pause_layer = -1; // -1: all
   int layer_pause_point = -1; // -1: all, 0: after attention, 1: after MLP
   int layer_pause_phase_mask = 1; // 1: prefill, 2: decode, 3: both
