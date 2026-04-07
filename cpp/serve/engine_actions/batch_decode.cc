@@ -18,6 +18,18 @@ namespace mlc {
 namespace llm {
 namespace serve {
 
+#if defined(__ANDROID__)
+#include <android/log.h>
+#define LOG_TAG "MLC-LAYER"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#else
+#define LOGI(...) ((void)0)
+#define LOGW(...) ((void)0)
+#define LOGE(...) ((void)0)
+#endif
+
 /*!
  * \brief The action that runs one-step decode for requests in the
  * `running_queue` of engine state. Preempt low-priority requests
@@ -67,8 +79,11 @@ class BatchDecodeActionObj : public EngineActionObj {
 
     // Prefill -> decode boundary handling
     for (const RequestStateEntry& rsentry : running_rsentries) {
-      ApplyDecodeClock(rsentry);
-      ApplyPhasePause(rsentry);
+      if (rsentry->rstate != nullptr && rsentry->rstate->metrics.decode_tokens == 0) {
+        LOGI("HERE is the decode setup");
+        ApplyDecodeClock(rsentry);
+        ApplyPhasePause(rsentry);
+      }
     }
     SetupLayerPauseDecode(running_rsentries);
 
