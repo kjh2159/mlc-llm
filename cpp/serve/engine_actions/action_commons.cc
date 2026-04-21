@@ -227,8 +227,6 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       int pause_ms = 0;
       std::string resume_file;
       
-      LOGI("1");
-
       {
         std::lock_guard<std::mutex> lock(state.mu);
         // if (!state.enabled) return x; // not enabled, do nothing
@@ -236,8 +234,9 @@ TVM_FFI_STATIC_INIT_BLOCK() {
         if (state.target_layer >= 0 && state.target_layer != static_cast<int>(layer_id)) 
           return x; // not the target layer, do nothing
       
-        if (state.target_point != -1 
-            || (state.target_point >= 0 && state.target_point != static_cast<int>(point_id)))
+        // TODO: change the logic
+        if (state.target_point != -1
+            && state.target_point != static_cast<int>(point_id))
           return x; // not the target point, do nothing
       
         if ((state.phase_mask & state.phase) == 0) 
@@ -250,6 +249,7 @@ TVM_FFI_STATIC_INIT_BLOCK() {
         // }
       }
       pause_ms = state.pause_ms;
+      pause_ms = 0;
       // resume_file = state.resume_file; // deactive
 
       if (!do_pause) return x; // double check, do nothing if not pausing
@@ -261,8 +261,11 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       //   }
       // } 
       
+      tvm::Device dev = {kDLOpenCL, 0};
+      tvm::runtime::DeviceAPI::Get(dev)->StreamSync(dev, nullptr); // sync before pause
+
       // LOG
-      LOGI("LayerPause check at layer %ld, point %ld", layer_id, point_id);
+      LOGI("LayerPause check at layer %ld, point %ld -- synched", layer_id, point_id);
 
       if (pause_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(pause_ms)); // pause
