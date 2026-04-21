@@ -9,6 +9,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock.sleep
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -155,29 +156,49 @@ class DVFS() : Device() {
         // /sys/devices/platform/1f000000.mali/scaling_min_freq
         // /sys/devices/platform/1f000000.mali/scaling_max_freq
 
+        Log.d("FREQ_SIZE", gpufreq[device]!!.size.toString())
         if (freqIndex >= gpufreq[device]!!.size) {
             return
         }
 
         val freq = gpufreq[device]!![freqIndex] // available frequencies for the device
-        var command = "su -c "
 
-        // make a command
-        when (device) {
-            // for GPU frequency, cur_freq is only readable (not writable).
-
-            "Pixel9" -> "echo $freq > /sys/devices/platform/1f000000.mali/scaling_max_freq; " +
-                        "echo $freq > /sys/devices/platform/1f000000.mali/scaling_min_freq; " +
-                        "echo $freq > /sys/devices/platform/1f000000.mali/scaling_max_freq; "  // to ensure max_freq set
-
-            "S24" -> command += "echo $freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/max_freq" +
-                                "echo $freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/min_freq" +
-                                "echo $freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/max_freq"
+        val paths = when (device) {
+            "Pixel9" -> listOf(
+                "/sys/devices/platform/1f000000.mali/scaling_max_freq",
+                "/sys/devices/platform/1f000000.mali/scaling_min_freq"
+            )
+            "S24" -> listOf(
+                "/sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/max_freq",
+                "/sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/min_freq"
+            )
+            else -> return
         }
 
-        // run android kernel command
-        val process = Runtime.getRuntime().exec(command)
-        process.waitFor()
+        try {
+            val process = Runtime.getRuntime().exec("su")
+            val os = process.outputStream.bufferedWriter()
+
+            for (path in paths) {
+                os.write("echo $freq > $path\n")
+            }
+            if (device == "Pixel9") {
+                os.write("echo $freq > ${paths[0]}\n")
+            }
+
+            os.write("exit\n")
+            os.flush()
+            os.close()
+
+            val result = process.waitFor()
+            if (result == 0) {
+                Log.i("CHECKER", "Successfully set freq to $freq")
+            } else {
+                Log.e("CHECKER", "Failed with exit code: $result")
+            }
+        } catch (e: Exception) {
+            Log.e("CHECKER", "Error executing su command", e)
+        }
     }
 
     fun unsetGPUFrequency() {
@@ -187,7 +208,7 @@ class DVFS() : Device() {
         val min_freq = freqs?.get(0)
         val max_freq = freqs?.get(freqs.size-1)
 
-        var command = "su -c "
+        var command = "su -c \""
 
         // make a command
         when (device) {
@@ -201,6 +222,7 @@ class DVFS() : Device() {
                                 "echo $min_freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/min_freq" +
                                 "echo $max_freq > /sys/devices/platform/22200000.sgpu/devfreq/22200000.sgpu/max_freq"
         }
+        command += "\""
 
         // run android kernel command
         val process = Runtime.getRuntime().exec(command)
@@ -224,36 +246,52 @@ class DVFS() : Device() {
 
         // S22 Ultra version (need to check S24)
         val freq = freqs[freqIndex]
-        Log.d("CHECKER", "$freq")
-        when (device) {
-            // Snapdragon 8 Gen 1
-            "S22_Ultra" -> command += "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/soc:qcom,memlat:ddr:prime/max_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/soc:qcom,memlat:ddr:prime/min_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/soc:qcom,memlat:ddr:prime-latfloor/max_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/soc:qcom,memlat:ddr:prime-latfloor/min_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/soc:qcom,memlat:ddr:gold/max_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/soc:qcom,memlat:ddr:gold/min_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/soc:qcom,memlat:ddr:gold-compute/max_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/soc:qcom,memlat:ddr:gold-compute/min_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/soc:qcom,memlat:ddr:silver/max_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/soc:qcom,memlat:ddr:silver/min_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/19091000.qcom,bwmon-ddr/max_freq; " +
-                    "echo $freq > /sys/devices/system/cpu/bus_dcvs/DDR/19091000.qcom,bwmon-ddr/min_freq; "
+        Log.d("CHECKER", "Target RAM Freq: $freq for device: $device")
 
-            // Exynos 2400
-            "S24" -> command += "echo $freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/scaling_devfreq_min; " +
-                    "echo $freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/scaling_devfreq_max; "
+        try {
+            val process = Runtime.getRuntime().exec("su")
+            val os = process.outputStream.bufferedWriter()
 
-            // Google Tensor 4
-            "Pixel9" -> command += "echo $freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/scaling_devfreq_min; " +
-                    "echo $freq > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/max_freq; "
+            when (device) {
+                "S22_Ultra" -> {
+                    val baseDir = "/sys/devices/system/cpu/bus_dcvs/DDR"
+                    val nodes = listOf(
+                        "soc:qcom,memlat:ddr:prime",
+                        "soc:qcom,memlat:ddr:prime-latfloor",
+                        "soc:qcom,memlat:ddr:gold",
+                        "soc:qcom,memlat:ddr:gold-compute",
+                        "soc:qcom,memlat:ddr:silver",
+                        "19091000.qcom,bwmon-ddr"
+                    )
+                    for (node in nodes) {
+                        os.write("echo $freq > $baseDir/$node/max_freq\n")
+                        os.write("echo $freq > $baseDir/$node/min_freq\n")
+                    }
+                }
 
+                "S24" -> {
+                    val path = "/sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif"
+                    os.write("echo $freq > $path/scaling_devfreq_min\n")
+                    os.write("echo $freq > $path/scaling_devfreq_max\n")
+                }
+
+                "Pixel9" -> {
+                    val path = "/sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif"
+                    os.write("echo $freq > $path/scaling_devfreq_min\n")
+                    os.write("echo $freq > $path/max_freq\n")
+                }
+            }
+
+            os.write("exit\n")
+            os.flush()
+            os.close()
+
+            val result = process.waitFor()
+            Log.i("CHECKER", "RAM Freq setting finished with exit code: $result")
+
+        } catch (e: Exception) {
+            Log.e("CHECKER", "Error setting RAM frequency", e)
         }
-        Log.d("CHECKER", command)
-
-        // run android kernel command
-        val process = Runtime.getRuntime().exec(command)
-        process.waitFor()
     }
 
     fun unsetRAMFrequency(){
@@ -554,7 +592,7 @@ fun SendMessageView(chatState: AppViewModel.ChatState, activity: Activity) {
     // query stream
     // TODO: make directory when it does not exist
     /** WARN: ensure the path. **/
-    val STORE_PATH_SRC = "/sdcard/Documents/mlc-llm"
+    val STORE_PATH_SRC = "/sdcard/Documents/mlc-llm/512_64"
     val coroutineScope = rememberCoroutineScope()
 
     // TODO: change soft code
@@ -569,7 +607,7 @@ fun SendMessageView(chatState: AppViewModel.ChatState, activity: Activity) {
     var qa_lists by remember { mutableStateOf<List<List<String>>>(emptyList()) }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            qa_lists = readCSV(context, "datasets/qwen3_64.csv")
+            qa_lists = readCSV(context, "datasets/qwen3_512.csv")
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(context, "dataset loaded!", Toast.LENGTH_SHORT).show()
             }
@@ -667,10 +705,10 @@ fun SendMessageView(chatState: AppViewModel.ChatState, activity: Activity) {
 
             /** Temporary for exp  **/
 
-            val gpu_idx = 11 // 0~13 (Pixel9) / 0~12 (S24)
+            val gpu_idx = 13 // 0~13 (Pixel9) / 0~12 (S24)
             val ram_idx = 12  // 0~12
-            val file_hard = "temp_hard.txt" //"S24_Qwen3_0.6B_Q4F16_0_64-128_hard_CPUvsGPU.txt" //"S24_Qwen3_0.6B_min_hard.txt"
-            val file_infer = "temp_infer.txt" //"S24_Qwen3_0.6B_Q4F16_0_64-128_infer_CPUvsGPU.txt" //"Pixel9_Llama3.2_3B_Q4F16_1_256-128_infer.txt"
+            val file_hard = "Pixel9_GPU_13-12_lp0_hard.txt"//"temp_hard.txt" //"S24_Qwen3_0.6B_Q4F16_0_64-128_hard_CPUvsGPU.txt" //"S24_Qwen3_0.6B_min_hard.txt"
+            val file_infer = "Pixel9_GPU_13-12_lp0_infer.txt"//"temp_infer.txt" //"S24_Qwen3_0.6B_Q4F16_0_64-128_infer_CPUvsGPU.txt" //"Pixel9_Llama3.2_3B_Q4F16_1_256-128_infer.txt"
 
             /* GPU DVFS */
             dvfs.setGPUFrequency(gpu_idx)
@@ -684,11 +722,12 @@ fun SendMessageView(chatState: AppViewModel.ChatState, activity: Activity) {
 
             /* Record Hard Info */
             coroutineScope.launch(crashHandler) {
+                delay(500) // stabilize
                 try {
                     BrightnessGuard.setBrightnessMin()
                     val startTime = System.currentTimeMillis()
                     qa_idx = 1
-                    qa_limit = 1
+                    qa_limit = 25
 
                     // recording start
                     CoroutineScope(Dispatchers.IO).launch {
@@ -748,8 +787,10 @@ fun SendMessageView(chatState: AppViewModel.ChatState, activity: Activity) {
                         BrightnessGuard.restoreBrightnessMax()
                         dvfs.unsetGPUFrequency()
                         dvfs.unsetRAMFrequency()
+                        delay(1000)
                     } catch (_: Throwable) {
                     }
+                    sigterm.value = true
                 }
             }
         }) {
